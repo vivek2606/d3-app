@@ -16,7 +16,7 @@ const xAccessor = d => d.Population;
 const yAccessor = d => d.Country;
 
 const siFormat = format(".2s")
-const xAxisTickFormat = tickValue => siFormat().replace('G', 'B')
+const xAxisTickFormat = tickValue => siFormat(tickValue).replace('G', 'B')
 export default function App() {
   const data = useData();
 
