@@ -78,7 +78,9 @@ class JobStore:
             mix = job_dir / "mix.wav"
             audio_io.decode_to_wav(source, mix)
 
-            self._update(job_dir, message=f"Extracting percussion ({method})")
+            slow = method == "demucs" or (method == "auto" and separation.demucs_available())
+            self._update(job_dir, message="Extracting percussion with Demucs (can take several minutes)"
+                         if slow else "Extracting percussion (HPSS)")
             drums, sr, used = separation.separate(mix, method)
             sf.write(str(job_dir / "drums.wav"), drums, sr, subtype="FLOAT")
             # Lightweight 16-bit copy for the browser waveform / audition player.
