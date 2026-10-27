@@ -1,10 +1,20 @@
 fastapi==0.162.0
 uvicorn==0.54.0
 python-multipart==0.0.32
-numpy==2.5.3
-scipy==1.18.1
-librosa==1.0.0
 soundfile==0.14.0
 soxr==1.1.0
 # Bundled static ffmpeg, used when ffmpeg isn't installed on the system.
 imageio-ffmpeg==0.6.0
+
+numpy==2.5.3; sys_platform != "darwin" or platform_machine != "x86_64"
+scipy==1.18.1; sys_platform != "darwin" or platform_machine != "x86_64"
+librosa==1.0.0; sys_platform != "darwin" or platform_machine != "x86_64"
+
+# Intel Macs (needs Python 3.11 or 3.12): PyTorch stopped at 2.2 there, which
+# needs NumPy 1.x, and numba/llvmlite stopped shipping Intel Mac wheels after
+# 0.62/0.45, so these are the last mutually compatible releases.
+numpy==1.26.4; sys_platform == "darwin" and platform_machine == "x86_64"
+scipy==1.16.3; sys_platform == "darwin" and platform_machine == "x86_64"
+librosa==0.11.0; sys_platform == "darwin" and platform_machine == "x86_64"
+numba==0.62.1; sys_platform == "darwin" and platform_machine == "x86_64"
+llvmlite==0.45.1; sys_platform == "darwin" and platform_machine == "x86_64"

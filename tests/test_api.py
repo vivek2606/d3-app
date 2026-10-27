@@ -27,7 +27,7 @@ def ready_job(client):
                       data={"separation_method": "hpss"})
     assert res.status_code == 200, res.text
     job_id = res.json()["id"]
-    for _ in range(120):
+    for _ in range(480):  # up to 2 min: a fresh env JIT-compiles librosa's numba code
         job = client.get(f"/api/jobs/{job_id}").json()
         if job["status"] in ("ready", "error"):
             break

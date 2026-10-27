@@ -18,25 +18,52 @@ if curl -s -o /dev/null "http://localhost:$PORT/api/config"; then
   exit 0
 fi
 
+# Python 3.11+, except on Intel Macs: PyTorch's last Intel Mac release (2.2)
+# only exists for Python 3.11 and 3.12. Judged by the architecture Python
+# runs as, so a Python under Rosetta counts as Intel too.
+PY_CHECK='import sys, platform
+v = sys.version_info[:2]
+intel = sys.platform == "darwin" and platform.machine() == "x86_64"
+sys.exit(0 if v >= (3, 11) and (not intel or v <= (3, 12)) else 1)'
+
+suitable() { command -v "$1" >/dev/null 2>&1 && "$1" -c "$PY_CHECK" 2>/dev/null; }
+
 pick_python() {
-  for py in python3.13 python3.12 python3.11 python3; do
-    if command -v "$py" >/dev/null 2>&1 &&
-       "$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
-      echo "$py"
+  for py in python3.12 python3.11 python3.13 python3.14 python3; do
+    if suitable "$py"; then
+      command -v "$py"
       return 0
     fi
   done
   return 1
 }
 
+# Fetch a private Python 3.12 with uv (used when none suitable is installed,
+# typically an Intel Mac with Python 3.13+). Needs any Python 3 to bootstrap.
+fetch_python() {
+  local boot
+  boot=$(command -v python3) || return 1
+  echo "Fetching Python 3.12 for TaalLoop (one time, about 30 MB)..." >&2
+  { [ -x .uv-tool/bin/uv ] || { "$boot" -m venv .uv-tool && .uv-tool/bin/python -m pip install --quiet uv==0.13.0; }; } >&2 &&
+    .uv-tool/bin/uv python install 3.12 >&2 &&
+    .uv-tool/bin/uv python find 3.12
+}
+
+# A .venv made by an unsuitable Python (e.g. 3.13 on an Intel Mac) can never
+# install TaalLoop; start it over.
+if [ -x .venv/bin/python ] && ! suitable .venv/bin/python; then
+  echo "Rebuilding TaalLoop's environment with a compatible Python..."
+  rm -rf .venv
+fi
+
 if [ ! -x .venv/bin/python ]; then
-  if ! PY=$(pick_python); then
+  if ! PY=$(pick_python) && ! PY=$(fetch_python); then
     echo "TaalLoop needs Python 3.11 or newer. Opening the download page..."
     echo "Install Python, then double-click this file again."
     open "https://www.python.org/downloads/"
     finish 1
   fi
-  echo "First run: setting up TaalLoop. This takes a few minutes..."
+  echo "First run: setting up TaalLoop with $("$PY" --version). This takes a few minutes..."
   "$PY" -m venv .venv || finish 1
 fi
 

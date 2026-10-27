@@ -1,7 +1,14 @@
 # Optional: high-quality drum separation with Demucs (installs PyTorch).
 # The default PyTorch from PyPI works on CPU and uses an NVIDIA GPU if present.
-# For a smaller CPU-only install, first run:
+# For a smaller CPU-only install on Linux, first run:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 # The first separation downloads the htdemucs model (~80 MB).
 -r requirements.txt
-demucs==4.1.0
+demucs==4.1.0; sys_platform != "darwin" or platform_machine != "x86_64"
+
+# Intel Macs (Python 3.11 or 3.12): PyTorch's last Intel Mac release is 2.2,
+# and demucs 4.1 needs sphn, which has no Intel Mac build. demucs 4.0.1 runs
+# the same htdemucs model (TaalLoop calls it in-process, without its file I/O).
+demucs==4.0.1; sys_platform == "darwin" and platform_machine == "x86_64"
+torch==2.2.2; sys_platform == "darwin" and platform_machine == "x86_64"
+torchaudio==2.2.2; sys_platform == "darwin" and platform_machine == "x86_64"

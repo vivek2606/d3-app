@@ -12,10 +12,8 @@ Two back-ends:
 
 from __future__ import annotations
 
+import functools
 import importlib.util
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 import librosa
@@ -48,21 +46,38 @@ def separate_hpss(audio: np.ndarray, sr: int) -> np.ndarray:
     return np.stack(channels, axis=1).astype(np.float32)
 
 
-def separate_demucs(wav_path: Path, sr: int) -> np.ndarray:
-    with tempfile.TemporaryDirectory() as tmp:
-        cmd = [
-            sys.executable, "-m", "demucs",
-            "--two-stems", "drums", "-n", "htdemucs",
-            "-o", tmp, str(wav_path),
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise SeparationError(f"demucs failed: {result.stderr.strip()[-500:]}")
-        stems = list(Path(tmp).glob("htdemucs/*/drums.wav"))
-        if not stems:
-            raise SeparationError("demucs did not produce a drums stem")
-        drums, stem_sr = read_audio(stems[0])
-    return resample(drums, stem_sr, sr)
+@functools.lru_cache(maxsize=1)
+def _demucs_model():
+    from demucs.pretrained import get_model
+
+    model = get_model("htdemucs")
+    model.eval()
+    return model
+
+
+def separate_demucs(audio: np.ndarray, sr: int) -> np.ndarray:
+    """The htdemucs ``drums`` stem, computed in-process.
+
+    Calling the model directly (instead of the ``demucs`` command line) keeps
+    audio file I/O out of Demucs, whose I/O dependencies differ between
+    versions and platforms (4.1 needs ``sphn``, which has no Intel Mac build;
+    4.0 needs torchaudio plus a system ffmpeg).  Same steps as ``demucs.separate``.
+    """
+    import torch
+    from demucs.apply import apply_model
+
+    model = _demucs_model()
+    wav = resample(audio, sr, model.samplerate)
+    if wav.shape[1] == 1:
+        wav = np.repeat(wav, 2, axis=1)
+    mix = torch.from_numpy(np.ascontiguousarray(wav.T, dtype=np.float32))
+    ref = mix.mean(0)
+    mean, std = ref.mean(), ref.std() + 1e-8
+    with torch.no_grad():
+        sources = apply_model(model, ((mix - mean) / std)[None], device="cpu",
+                              shifts=1, split=True, overlap=0.25, progress=False)[0]
+    drums = sources[model.sources.index("drums")] * std + mean
+    return resample(drums.numpy().T, model.samplerate, sr).astype(np.float32)
 
 
 def separate(wav_path: Path, method: str = "auto") -> tuple[np.ndarray, int, str]:
@@ -75,5 +90,5 @@ def separate(wav_path: Path, method: str = "auto") -> tuple[np.ndarray, int, str
     if method == "demucs":
         if not demucs_available():
             raise SeparationError("demucs is not installed (pip install -r requirements-demucs.txt)")
-        return separate_demucs(wav_path, sr), sr, "demucs"
+        return separate_demucs(audio, sr), sr, "demucs"
     return separate_hpss(audio, sr), sr, "hpss"
