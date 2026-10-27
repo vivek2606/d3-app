@@ -17,11 +17,23 @@ class DecodeError(RuntimeError):
     pass
 
 
+def find_ffmpeg() -> str | None:
+    """System ffmpeg if installed, else the static build bundled by imageio-ffmpeg."""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, RuntimeError):
+        return None
+
+
 def decode_to_wav(src: Path, dst: Path, sample_rate: int = WORKING_SAMPLE_RATE) -> None:
     """Extract the audio track of ``src`` (mp3, flac, m4a, mp4, mkv, ...) to float WAV."""
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = find_ffmpeg()
     if ffmpeg is None:
-        raise DecodeError("ffmpeg is not installed or not on PATH")
+        raise DecodeError("ffmpeg not found: install it, or pip install imageio-ffmpeg")
     cmd = [
         ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
         "-i", str(src),

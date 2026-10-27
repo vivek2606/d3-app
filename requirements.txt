@@ -6,3 +6,5 @@ scipy==1.18.1
 librosa==1.0.0
 soundfile==0.14.0
 soxr==1.1.0
+# Bundled static ffmpeg, used when ffmpeg isn't installed on the system.
+imageio-ffmpeg==0.6.0

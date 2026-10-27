@@ -17,9 +17,37 @@ upload (mp3/wav/flac/m4a/mp4/mkv…)
   → Loop Slicer & Formatter Engine → 16-bit PCM WAVs
 ```
 
-## Quick start
+## Run it on your laptop (Mac or Windows)
 
-Requires Python 3.11+ and `ffmpeg` on your `PATH`.
+1. **Install Python 3.11 or newer** (3.12 or 3.13 recommended) from
+   <https://www.python.org/downloads/>. On Windows, tick **"Add python.exe to
+   PATH"** on the installer's first screen. You don't need to install ffmpeg:
+   a copy comes with the app.
+2. **Download the app**: on the GitHub page click **Code → Download ZIP**,
+   and unzip it, for example onto your Desktop.
+3. **Double-click the launcher** in the unzipped folder:
+   - Mac: **`Start TaalLoop.command`**. The first time, macOS may say it
+     can't check the file. If so, right-click it → **Open** → **Open**, or
+     allow it under **System Settings → Privacy & Security**.
+   - Windows: **`Start TaalLoop.bat`**. If SmartScreen appears, click **More
+     info → Run anyway**.
+
+The first start installs everything into a private `.venv` folder inside
+the app folder (about 1 GB, a few minutes). After that it starts in seconds.
+Your browser opens <http://localhost:8000> by itself. Keep the launcher
+window open while you work, and close it to stop TaalLoop. Your first Demucs
+song also downloads the separation model (~80 MB) once.
+
+**From your iPad**: the launcher window shows an address like
+`http://192.168.1.20:8000`. Open it in Safari on the iPad while it's on the
+same Wi-Fi; downloaded loops land in the Files app, ready for Logic. On
+Windows, allow TaalLoop through the firewall on private networks when asked.
+Anyone else on the same Wi-Fi could open that address too, so use it on
+your home network.
+
+### Manual start (any OS)
+
+Requires Python 3.11+.
 
 ```bash
 pip install -r requirements.txt            # core (HPSS separation)
@@ -28,7 +56,8 @@ uvicorn taalloop.main:app --port 8000
 ```
 
 Open <http://localhost:8000>. Uploads and job files are stored in `./data`
-(override with `TAALLOOP_DATA_DIR`).
+(override with `TAALLOOP_DATA_DIR`). ffmpeg is used from your `PATH` if
+installed, otherwise the copy bundled by `imageio-ffmpeg`.
 
 With Docker:
 
@@ -51,16 +80,19 @@ Then open <http://localhost:8000>.
 Demucs is used automatically when it's installed. HPSS is a fallback, so expect
 noisier loops with it.
 
-## Free online hosting (Hugging Face Spaces)
+## Online hosting (Hugging Face Spaces)
 
-The free **CPU basic** Space (2 vCPU, 16 GB RAM) runs the full app,
-Demucs included. The repo deploys there on its own: every push to `main`
+Hosting a Docker Space needs a Hugging Face **PRO** account ($9/month at the
+time of writing). The Space hardware itself, **CPU basic** (2 vCPU, 16 GB
+RAM), is free and runs the full app, Demucs included. The repo deploys there
+on its own: every push to `main`
 runs `.github/workflows/deploy-hf-space.yml`, which pushes the app to your
 Space, and the Space rebuilds the Docker image.
 
 One-time setup:
 
-1. **Create a Hugging Face account** at <https://huggingface.co/join>.
+1. **Create a Hugging Face account** at <https://huggingface.co/join> and
+   subscribe to PRO.
 2. **Create the Space**: <https://huggingface.co/new-space>
    - Space name: `taalloop`
    - SDK: **Docker**, template **Blank**
