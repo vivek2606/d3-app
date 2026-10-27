@@ -1,4 +1,4 @@
-"""Transient detection and one-shot extraction (Bayan / Chanti / Slap).
+"""Transient detection and stroke classification (Bayan / Chanti / Slap).
 
 Every onset in the percussion stem is classified from the first ~100 ms of its
 spectrum with a few transparent rules:
@@ -10,8 +10,8 @@ spectrum with a few transparent rules:
 * **Chanti** - everything else: tonal, bright, ringing strokes on the dayan rim
   (Na/Ta/Tin, bells, rims).
 
-The rules are heuristics, not a trained classifier, so the labels are a starting
-point for building a kit rather than ground truth.
+The hits drive roll/toda detection and label the slice (cue) markers embedded
+in exported WAVs.  The rules are heuristics, not a trained classifier.
 """
 
 from __future__ import annotations
@@ -25,8 +25,7 @@ CLASSES = ("Bayan", "Chanti", "Slap")
 HOP = 256
 FEATURE_MS = 100
 MAX_HIT_SECONDS = 1.5
-TAIL_DB = -48.0
-PRE_ROLL_MS = 1.0
+PRE_ECHO_SECONDS = 0.12
 
 
 @dataclass
@@ -68,12 +67,14 @@ def hit_features(segment: np.ndarray, sr: int) -> tuple[float, float, float, flo
 def classify(low_ratio: float, centroid: float, flatness: float, decay: float) -> str:
     if low_ratio > 0.45:
         return "Bayan"
-    if flatness > 0.2 or (decay < 0.06 and centroid > 1500):
+    # Noisiness is the defining trait of a slap; a short decay alone is not
+    # enough because separation trims the ring of tonal strokes too.
+    if flatness > 0.2 or (decay < 0.06 and flatness > 0.08 and centroid > 1500):
         return "Slap"
     return "Chanti"
 
 
-def detect_hits(mono: np.ndarray, sr: int) -> list[Hit]:
+def detect_hits(mono: np.ndarray, sr: int, suppress_pre_echo: bool = False) -> list[Hit]:
     # Leading silence lets the onset envelope see a hit that starts at sample 0.
     pad = int(0.1 * sr)
     padded = np.concatenate([np.zeros(pad, mono.dtype), mono])
@@ -93,50 +94,22 @@ def detect_hits(mono: np.ndarray, sr: int) -> list[Hit]:
             continue
         feats = hit_features(segment, sr)
         hits.append(Hit(onset / sr, classify(*feats), peak, (nxt - onset) / sr, *feats))
-    return hits
+    return _drop_pre_echoes(hits) if suppress_pre_echo else hits
 
 
-def extract_one_shot(audio: np.ndarray, sr: int, time: float, next_time: float | None,
-                     normalize: bool = True) -> np.ndarray:
-    """Cut a single hit, trim its tail at -48 dB and fade it out."""
-    start = max(0, int(round((time - PRE_ROLL_MS / 1000) * sr)))
-    end = len(audio) if next_time is None else int(round(next_time * sr))
-    end = min(end, start + int(sr * MAX_HIT_SECONDS))
-    segment = audio[start:end].copy()
-    if len(segment) == 0:
-        return segment
-    env = np.abs(segment).max(axis=1)
-    peak = env.max()
-    if peak > 0:
-        loud = np.nonzero(env > peak * 10 ** (TAIL_DB / 20))[0]
-        segment = segment[: loud[-1] + 1]
-    n_in = min(len(segment), int(sr * 0.0005))
-    n_out = min(len(segment), max(1, int(sr * 0.01)))
-    if n_in:
-        segment[:n_in] *= np.linspace(0, 1, n_in)[:, None]
-    segment[-n_out:] *= (0.5 + 0.5 * np.cos(np.linspace(0, np.pi, n_out)))[:, None]
-    if normalize and peak > 0:
-        segment *= 10 ** (-1 / 20) / np.abs(segment).max()  # -1 dBFS
-    return segment
+def _drop_pre_echoes(hits: list[Hit]) -> list[Hit]:
+    """Remove faint onsets just before a much louder one.
 
-
-def select_best(hits: list[dict], per_class: int) -> dict[str, list[dict]]:
-    """The loudest, most isolated hits of each class (overlapping hits make bad one-shots)."""
-    chosen: dict[str, list[dict]] = {}
-    for label in CLASSES:
-        candidates = [h for h in hits if h["label"] == label]
-        candidates.sort(key=lambda h: h["peak"] * min(h["gap"], 0.3) / 0.3, reverse=True)
-        chosen[label] = sorted(candidates[:per_class], key=lambda h: h["time"])
-    return chosen
-
-
-def kit_map_text(song: str, files: dict[str, list[str]]) -> str:
-    """Suggested key layout for a Nautilus drum kit / FPC (one class per octave)."""
-    base_notes = {"Bayan": 36, "Chanti": 48, "Slap": 60}  # C2, C3, C4
-    names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    lines = [f"{song} - suggested drum-kit key map", ""]
-    for label in CLASSES:
-        for i, name in enumerate(files.get(label, [])):
-            note = base_notes[label] + i
-            lines.append(f"{names[note % 12]}{note // 12 - 1:<3} {name}")
-    return "\n".join(lines) + "\n"
+    STFT-based separation (HPSS) smears a little energy ~one window ahead of a
+    strong attack, which the onset detector reports as a separate quiet hit.
+    Only applied after HPSS: on clean stems it would eat soft strokes in rolls.
+    """
+    kept: list[Hit] = []
+    for i, hit in enumerate(hits):
+        nxt = hits[i + 1] if i + 1 < len(hits) else None
+        if nxt is not None and hit.gap < PRE_ECHO_SECONDS and hit.peak < 0.5 * nxt.peak:
+            continue
+        kept.append(hit)
+    for i, hit in enumerate(kept[:-1]):
+        hit.gap = kept[i + 1].time - hit.time
+    return kept

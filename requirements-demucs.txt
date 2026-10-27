@@ -1,0 +1,4 @@
+# Optional: high-quality drum separation (installs PyTorch, ~2 GB).
+# For a CUDA GPU, install the matching torch build first: https://pytorch.org/get-started/locally/
+-r requirements.txt
+demucs==4.1.0

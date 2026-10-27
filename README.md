@@ -1,0 +1,179 @@
+# TaalLoop
+
+Upload a song (audio or video), extract its drums/percussion, and export
+**bar-exact 16-bit loops, todas (fills) and rolls** ready for the **Korg
+Nautilus** sampler and **FL Studio**. The app understands Indian taals:
+Keherwa (4/4), Dadra (6 beats) and Rupak (7 beats).
+
+```
+upload (mp3/wav/flac/m4a/mp4/mkv…)
+  → ffmpeg decode
+  → drum separation (Demucs htdemucs, or HPSS fallback)
+  → tempo + beat tracking, Sam (beat 1) estimation per taal
+  → stroke detection (Bayan / Chanti / Slap), beats snapped onto strokes
+  → toda + roll detection on the bar grid
+  → browser editor (WaveSurfer.js): confirm the grid, audition loops gaplessly
+  → Loop Slicer & Formatter Engine → 16-bit PCM WAVs
+```
+
+## Quick start
+
+Requires Python 3.11+ and `ffmpeg` on your `PATH`.
+
+```bash
+pip install -r requirements.txt            # core (HPSS separation)
+pip install -r requirements-demucs.txt     # optional, recommended: Demucs (installs PyTorch)
+uvicorn taalloop.main:app --port 8000
+```
+
+Open <http://localhost:8000>. Uploads and job files are stored in `./data`
+(override with `TAALLOOP_DATA_DIR`).
+
+With Docker:
+
+```bash
+docker build -t taalloop .                              # HPSS only
+docker build -t taalloop --build-arg WITH_DEMUCS=1 .    # with Demucs
+docker run -p 8000:8000 -v taalloop-data:/data taalloop
+```
+
+### Which separation to use
+
+| | Demucs (`htdemucs` drums stem) | HPSS (librosa) |
+|---|---|---|
+| Quality | Clean drum stem, keeps tabla/dholak tone | Rougher: melody bleeds through, and the dayan's ring is thinned |
+| Speed | ~1–2 min/song on CPU, seconds on GPU | Seconds |
+| Install | PyTorch (~2 GB) | Included |
+
+Demucs is used automatically when it's installed. HPSS is a fallback, so expect
+noisier loops with it.
+
+## Using the editor
+
+1. **Upload** a song and wait for the percussion to be extracted.
+2. **Time signature**: pick `4/4 (Keherwa)`, `3/4 or 6/8 (Dadra)` or
+   `7/8 (Rupak)`. Bar lines (the Sam of every cycle) are drawn on the waveform.
+   An 8-beat Keherwa cycle is a 2-bar loop.
+3. **Check the Sam.** Beat trackers are right about 85% of the time. On rubato
+   intros, laggi tempo shifts or dense thekas they can put beat 1 on beat 3, or
+   lock onto the off-beat. Drag the loop region to the real beat 1 and click
+   **Set Sam at loop start**. Untick *Snap loop start to the nearest beat*
+   first if beat 1 falls between the tracked beats, and the whole grid shifts.
+4. **Audition**: *Audition loop* plays the region endlessly through a
+   sample-accurate Web Audio loop, with no gap at the joint. Drag or resize the
+   region while it plays.
+5. **Download Selected Loop (16-bit WAV)** exports the region. Or bulk-export:
+   - **Export all loops**: every 1/2/4-bar loop from the Sam onward. By default,
+     loops containing a toda or roll are skipped, so the set is pure theka.
+   - **Export todas & rolls**: the detected fills, in `Toda/` and `Roll/`
+     folders. Click a chip to hear one first.
+
+## What gets exported
+
+| | Loops | Todas | Rolls |
+|---|---|---|---|
+| Filename | `Song_Loop01_120BPM_4Bar.wav` | `Song_Toda01_120BPM_1Bar.wav` | `Song_Roll01_120BPM_2Beat.wav` |
+| Length | exactly 1, 2 or 4 bars | 1 or 2 whole bars | whole beats (≤ 8) |
+| Loop point (`smpl` chunk) | yes, whole file | no (plays once) | no (plays once) |
+
+Every file is:
+
+- **16-bit PCM WAV (`PCM_16`)** with a plain `WAVE_FORMAT_PCM` header (not
+  `WAVE_FORMAT_EXTENSIBLE`), TPDF-dithered from float.
+- **48,000 Hz** (Nautilus native) **or 44,100 Hz**.
+- **Bar-exact**: length = `bars × beats_per_bar × 60 / BPM` seconds to the
+  nearest sample, using the *rounded* BPM in the filename. FL Studio's stretch
+  and the Nautilus tempo knob both use that number, so the file length agrees
+  with it exactly.
+- **Click-free**: the start is snapped within ±5 ms of the beat to where both
+  the first sample and the wrap-around point are near zero crossings, then
+  2 ms / 4 ms raised-cosine micro-fades are applied.
+- Optionally **cue-marked**: a labelled cue point (`01 Bayan`, `02 Chanti`, …)
+  on every stroke, in the standard RIFF `cue `/`LIST adtl` chunks that
+  slicers such as FL Studio's Slicex read as slice points.
+
+### How todas and rolls are detected
+
+- **Roll**: at least 6 strokes, each within `min(beat/5, 90 ms)` of the last,
+  spanning at least half a beat. The file starts on the roll's beat and ends on
+  the beat after the last stroke, so its tail rings out.
+- **Toda**: each bar's strokes are laid on a 4-slots-per-beat grid and compared
+  with the song's typical theka bar (the slot-wise median). A bar that differs
+  far more than the song's normal bar-to-bar variation, and has at least 15%
+  more strokes, is a toda. Runs of 3 or more such bars count as a new section,
+  not a fill.
+
+These are transparent heuristics, not a trained model, so audition the chips
+before exporting.
+
+## Loading the WAVs into your gear
+
+### Korg Nautilus 61 AT (live keyboard + loop performance)
+
+1. Copy the 16-bit / 48 kHz WAVs to a USB drive and plug it into the Nautilus.
+2. **MEDIA** mode → **Load** tab → select the `.wav` and load it into Sampling
+   Mode RAM.
+3. **MODE → SAMPLING → Loop Edit** tab: tick **Loop** (and **Lock**) for loops.
+   The file is already cut to an exact bar boundary with micro-fades, so the
+   default `Start = 0` and `End = end of sample` loop seamlessly. Leave Loop
+   **off** for todas and rolls so they play once per key press.
+4. Page menu (top right) → **Convert MS To Program** to map the multisample to
+   a User Program. Save the KSC file and add it to **Global → KSC Auto-Load**.
+5. In your Combination, put the percussion Program on a split key at the far
+   left of the 61-key bed (e.g. loop on `C2` with Hold, todas and rolls on the
+   neighbouring keys), or trigger it with a latching Chord Trigger / Arp /
+   Drum Track switch, so your hands stay free for strings, bass and lead.
+6. Set the Nautilus tempo to the BPM in the filename.
+
+### FL Studio
+
+1. Drag `Song_Loop01_120BPM_2Bar.wav` into the Playlist, or into Fruity Slicer
+   / Slicex. The embedded cue markers are standard RIFF cue points that Slicex
+   should pick up as slice markers. If your version ignores them, use Slicex's
+   own auto-slicing instead.
+2. In the Audio Clip channel settings set **Time stretching → Mode** to
+   **Stretch** (or *e3 Generic*), right-click the **Time** knob and pick the
+   bar count (*2 bars*). The clip locks to any project tempo.
+3. Todas and rolls work the same way. For a roll, set the Time knob to its
+   beat count, then drop it at the end of a loop to lead back into the Sam.
+
+## API
+
+| Method | Path | Body |
+|---|---|---|
+| `GET` | `/api/config` | supported taals, bar counts, sample rates, separation methods |
+| `POST` | `/api/jobs` | multipart `file`, `separation_method` = `auto`/`demucs`/`hpss` |
+| `GET` | `/api/jobs/{id}` | job status; when ready: `bpm`, `beat_times`, `downbeat_index`, `hits` |
+| `GET` | `/api/jobs/{id}/preview.wav` | the percussion stem (16-bit) |
+| `POST` | `/api/jobs/{id}/phrases` | grid → detected todas/rolls (JSON) |
+| `POST` | `/api/jobs/{id}/export/loops` | grid + `bars`, `sample_rate`, `embed_cues`, `skip_fills` → zip |
+| `POST` | `/api/jobs/{id}/export/region` | `start`, `end`, `bars`, `time_signature`, `sample_rate` → WAV |
+| `POST` | `/api/jobs/{id}/export/fills` | grid + `sample_rate`, `kinds` → zip |
+
+The grid is `{"time_signature": "4/4" | "6/8" | "7/8", "bpm": <override>, "sam_time": <seconds of a beat 1>}`.
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests render synthetic tabla grooves (bayan, chanti and slap strokes;
+keherwa with todas and rolls; dadra; rupak) and check exact loop lengths, WAV
+headers, zero-crossing snapping, Sam estimation, stroke classification, and
+toda/roll detection, through to the HTTP API.
+
+Code layout:
+
+| Module | Role |
+|---|---|
+| `taalloop/wavio.py` | hand-written 16-bit WAV encoder (`fmt `, `data`, `cue `, `LIST adtl`, `smpl`) and parser |
+| `taalloop/audio_io.py` | ffmpeg decoding, resampling |
+| `taalloop/separation.py` | Demucs / HPSS drum separation |
+| `taalloop/rhythm.py` | taals, tempo, Sam estimation, beat-to-stroke alignment, grid shift |
+| `taalloop/hits.py` | stroke onsets and Bayan/Chanti/Slap classification |
+| `taalloop/phrases.py` | toda and roll detection |
+| `taalloop/slicer.py` | the Loop Slicer & Formatter Engine |
+| `taalloop/jobs.py`, `taalloop/main.py` | background job pipeline and FastAPI app |
+| `frontend/` | editor UI; WaveSurfer.js 7.12.12 vendored in `frontend/vendor` (BSD-3) |

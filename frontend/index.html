@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TaalLoop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>TaalLoop</h1>
+    <p class="sub">Extract the percussion from a song and export bar-exact 16-bit loops, todas and rolls for the Korg Nautilus and FL Studio.</p>
+  </header>
+
+  <section class="card" id="upload-card">
+    <h2>1. Upload a song</h2>
+    <form id="upload-form">
+      <label class="file">
+        <input type="file" id="file" accept="audio/*,video/*" required>
+        <span id="file-name">Choose an audio or video file…</span>
+      </label>
+      <label>Separation
+        <select id="separation"></select>
+      </label>
+      <button type="submit" id="upload-btn">Extract percussion</button>
+    </form>
+    <p id="status" class="status" role="status"></p>
+  </section>
+
+  <section class="card" id="editor" hidden>
+    <h2>2. Pick the loop</h2>
+    <dl class="stats">
+      <div><dt>Detected tempo</dt><dd id="stat-bpm">–</dd></div>
+      <div><dt>Separation</dt><dd id="stat-sep">–</dd></div>
+      <div><dt>Fills found</dt><dd id="stat-fills">–</dd></div>
+      <div><dt>Selected loop</dt><dd id="stat-region">–</dd></div>
+    </dl>
+
+    <div class="controls">
+      <label>Time signature
+        <select id="ts"></select>
+      </label>
+      <label>Loop length
+        <select id="bars"></select>
+      </label>
+      <label>Tempo (BPM)
+        <input type="number" id="bpm" min="30" max="400" step="1">
+      </label>
+      <label>Sample rate
+        <select id="sr">
+          <option value="48000">48,000 Hz (Nautilus native)</option>
+          <option value="44100">44,100 Hz</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="checks">
+      <label><input type="checkbox" id="lock-length" checked> Lock loop length to the bar count</label>
+      <label><input type="checkbox" id="snap-beat" checked> Snap loop start to the nearest beat</label>
+      <label><input type="checkbox" id="embed-cues" checked> Embed slice markers (for Slicex)</label>
+      <label><input type="checkbox" id="skip-fills" checked> Skip loops containing a toda or roll</label>
+    </div>
+
+    <div id="waveform" aria-label="Percussion waveform"></div>
+    <div class="zoom">
+      <label>Zoom <input type="range" id="zoom" min="10" max="400" value="40"></label>
+      <span class="legend"><i class="sam"></i> Sam (beat 1) <i class="loop"></i> Loop region <i class="toda"></i> Toda <i class="roll"></i> Roll</span>
+    </div>
+
+    <div class="actions">
+      <button id="play-loop" type="button">▶ Audition loop</button>
+      <button id="play-track" type="button" class="secondary">Play track</button>
+      <button id="set-sam" type="button" class="secondary">Set Sam at loop start</button>
+      <button id="download-loop" type="button" class="primary">Download Selected Loop (16-bit WAV)</button>
+    </div>
+    <div id="phrases" class="phrases" aria-label="Detected todas and rolls"></div>
+    <p class="hint">Drag the loop region to move it and its edges to resize it. If the bar lines don't land on the Sam, move the loop start to the real beat 1 and click <b>Set Sam at loop start</b> (untick <i>Snap loop start</i> first if beat 1 falls between the tracked beats). The bulk export and the toda/roll detection use the same grid. Click a toda or roll chip to hear it.</p>
+  </section>
+
+  <section class="card" id="export" hidden>
+    <h2>3. Bulk export</h2>
+    <div class="actions">
+      <button id="export-loops" type="button" class="primary">Export all loops (.zip)</button>
+      <button id="export-fills" type="button" class="primary">Export todas &amp; rolls (.zip)</button>
+    </div>
+    <p class="hint">Loops are named <code>Song_Loop01_120BPM_4Bar.wav</code>: 16-bit PCM, bar-exact length, start snapped to a zero crossing, micro-fades and an embedded loop point. Todas are whole bars (<code>Song_Toda01_120BPM_1Bar.wav</code>) and rolls are whole beats (<code>Song_Roll01_120BPM_2Beat.wav</code>), so they stretch in sync. They have no loop point and play once per trigger.</p>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

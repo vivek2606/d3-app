@@ -1,0 +1,134 @@
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --text: #1d1c1a;
+  --muted: #6b6760;
+  --border: #e2dfd8;
+  --accent: #c2410c;
+  --accent-text: #ffffff;
+  --wave: #a8a29e;
+  --progress: #57534e;
+  --sam: rgba(194, 65, 12, 0.9);
+  --loop: rgba(234, 88, 12, 0.18);
+  --toda: rgba(37, 99, 235, 0.16);
+  --roll: rgba(22, 163, 74, 0.18);
+  --toda-solid: #2563eb;
+  --roll-solid: #16a34a;
+  --error: #b91c1c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161514;
+    --surface: #211f1d;
+    --text: #f1efeb;
+    --muted: #a39e96;
+    --border: #3a3733;
+    --accent: #fb923c;
+    --accent-text: #1d1c1a;
+    --wave: #78716c;
+    --progress: #d6d3d1;
+    --sam: rgba(251, 146, 60, 0.95);
+    --loop: rgba(251, 146, 60, 0.2);
+    --toda: rgba(96, 165, 250, 0.2);
+    --roll: rgba(74, 222, 128, 0.2);
+    --toda-solid: #60a5fa;
+    --roll-solid: #4ade80;
+    --error: #f87171;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+header h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
+.sub { margin: 4px 0 20px; color: var(--muted); }
+h2 { margin: 0 0 14px; font-size: 17px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+form, .controls, .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 14px 0; }
+.checks label { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+
+select, input[type="number"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  min-width: 120px;
+}
+.file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.file span {
+  display: inline-block;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file input:focus-visible + span { outline: 2px solid var(--accent); }
+
+button {
+  font: inherit;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+button.primary, #upload-btn { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+button:disabled { opacity: 0.55; cursor: progress; }
+
+.status { margin: 12px 0 0; color: var(--muted); min-height: 1.5em; }
+.status.error { color: var(--error); }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0 0 16px; }
+.stats div { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.stats dt { font-size: 12px; color: var(--muted); }
+.stats dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+#waveform { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 4px; }
+.zoom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; }
+.zoom label { flex-direction: row; align-items: center; gap: 8px; }
+.legend { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.legend i.sam { background: var(--sam); width: 3px; }
+.legend i.loop { background: var(--loop); border: 1px solid var(--sam); margin-left: 8px; }
+.legend i.toda { background: var(--toda); border: 1px solid var(--toda-solid); margin-left: 8px; }
+.legend i.roll { background: var(--roll); border: 1px solid var(--roll-solid); margin-left: 8px; }
+
+.phrases { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+.phrases:empty::before { content: "No todas or rolls detected on this grid."; color: var(--muted); font-size: 13px; }
+.chip { font-size: 13px; padding: 4px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.chip.toda { border-color: var(--toda-solid); background: var(--toda); }
+.chip.roll { border-color: var(--roll-solid); background: var(--roll); }
+#waveform [part~="region-content"] { font-size: 11px; padding: 2px 4px; color: var(--text); white-space: nowrap; }
+
+.hint { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+code { font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+
+@media (max-width: 600px) {
+  select, input[type="number"] { min-width: 0; width: 100%; }
+  .controls label, form label { flex: 1 1 140px; }
+}

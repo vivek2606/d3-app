@@ -79,6 +79,58 @@ def estimate_downbeat(bass_env: np.ndarray, beat_frames: np.ndarray, ts: TimeSig
     return int(np.argmax(scores))
 
 
+def refine_bpm(bpm: float, beat_times: np.ndarray) -> float:
+    """Tempo from a least-squares line through the beat times.
+
+    librosa's global tempo is quantised by the onset-envelope frame grid
+    (~23 ms), which is enough to turn 100 BPM into 99.4.  Fitting all tracked
+    beats averages that error away.  The fit is only trusted when it agrees with
+    the global estimate, so a song with large tempo changes keeps the original.
+    """
+    if len(beat_times) < 8:
+        return bpm
+    slope = np.polyfit(np.arange(len(beat_times)), beat_times, 1)[0]
+    fitted = 60.0 / slope if slope > 0 else bpm
+    return float(fitted) if abs(fitted - bpm) / bpm < 0.04 else bpm
+
+
+def align_beats_to_onsets(beat_times: list[float], onset_times: list[float], window: float = 0.07) -> list[float]:
+    """Move each beat onto the stroke that starts it.
+
+    Tracked beats sit on onset-envelope peaks, 10-30 ms *after* the attack; a
+    loop cut there loses the front of the Sam stroke.  Each beat snaps back to
+    the latest onset at most ``window`` before it (never forward, which in a
+    dense roll would grab a later stroke); beats without one shift by the
+    median lag of those that snapped.
+    """
+    if not beat_times or not onset_times:
+        return list(beat_times)
+    onsets = np.sort(np.asarray(onset_times))
+    beats = np.asarray(beat_times)
+    pos = np.searchsorted(onsets, beats + 0.005, side="right") - 1
+    preceding = onsets[np.clip(pos, 0, len(onsets) - 1)]
+    close = (pos >= 0) & (beats - preceding <= window)
+    lag = float(np.median(preceding[close] - beats[close])) if close.any() else 0.0
+    aligned = np.maximum(np.where(close, preceding, beats + lag), 0.0)
+    return [float(t) for t in aligned]
+
+
+def shift_grid(beat_times: list[float], sam_time: float, tolerance: float = 0.04) -> tuple[list[float], int]:
+    """Use ``sam_time`` as beat 1; shift the whole grid if it falls between tracked beats.
+
+    Returns (beat_times, index of the Sam).  This is how the user fixes a
+    tracker that locked onto the off-beat.
+    """
+    if not beat_times:
+        return [sam_time], 0
+    beats = np.asarray(beat_times)
+    index = int(np.argmin(np.abs(beats - sam_time)))
+    delta = sam_time - beats[index]
+    if abs(delta) > tolerance:
+        beats = beats + delta
+    return [float(t) for t in beats], index
+
+
 def analyze(mono: np.ndarray, sr: int) -> RhythmAnalysis:
     onset_env, bass_env = _envelopes(mono, sr)
     tempo, beat_frames = librosa.beat.beat_track(
@@ -86,5 +138,6 @@ def analyze(mono: np.ndarray, sr: int) -> RhythmAnalysis:
     )
     bpm = float(np.atleast_1d(tempo)[0])
     beat_times = librosa.frames_to_time(beat_frames, sr=ANALYSIS_SAMPLE_RATE, hop_length=HOP)
+    bpm = refine_bpm(bpm, beat_times)
     downbeats = {ts_id: estimate_downbeat(bass_env, beat_frames, ts) for ts_id, ts in TIME_SIGNATURES.items()}
     return RhythmAnalysis(bpm=bpm, beat_times=[float(t) for t in beat_times], downbeat_index=downbeats)

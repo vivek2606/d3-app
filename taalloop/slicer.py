@@ -104,7 +104,7 @@ def _rms_dbfs(audio: np.ndarray) -> float:
     return 20 * np.log10(rms) if rms > 0 else -np.inf
 
 
-def _cues_for(hits: list[dict] | None, start: int, length: int, sample_rate: int) -> list[Cue]:
+def cues_for(hits: list[dict] | None, start: int, length: int, sample_rate: int) -> list[Cue]:
     if not hits:
         return []
     cues = []
@@ -147,12 +147,6 @@ def sam_times(beat_times: list[float], downbeat_index: int, bpm: float,
     return starts
 
 
-def nearest_beat_index(beat_times: list[float], time: float) -> int:
-    if not beat_times:
-        return 0
-    return int(np.argmin(np.abs(np.asarray(beat_times) - time)))
-
-
 def slice_loops(
     audio: np.ndarray,
     sample_rate: int,
@@ -165,8 +159,14 @@ def slice_loops(
     hits: list[dict] | None = None,
     max_loops: int = 64,
     skip_silent: bool = True,
+    exclude: list | None = None,
 ) -> list[Loop]:
-    """Slice the whole percussion track into bar-exact loops starting on the Sam."""
+    """Slice the whole percussion track into bar-exact loops starting on the Sam.
+
+    ``exclude`` holds phrases (anything with ``start``/``core_end`` seconds,
+    such as detected todas and rolls); loops overlapping one by more than a
+    quarter beat are skipped so the loop set stays pure theka.
+    """
     if bars not in ALLOWED_BARS:
         raise ValueError(f"bars must be one of {ALLOWED_BARS}")
     bpm = round_bpm(bpm)
@@ -181,6 +181,9 @@ def slice_loops(
         segment, start = cut_loop(audio, sample_rate, start_time, length)
         if skip_silent and _rms_dbfs(segment) < SILENCE_DBFS:
             continue
+        end_time = start_time + length / sample_rate
+        if exclude and any(min(end_time, p.core_end) - max(start_time, p.start) > 15.0 / bpm for p in exclude):
+            continue
         number = len(loops) + 1
         loops.append(Loop(
             number=number,
@@ -190,7 +193,7 @@ def slice_loops(
             bpm=bpm,
             bars=bars,
             start_time=start / sample_rate,
-            cues=_cues_for(hits, start, length, sample_rate),
+            cues=cues_for(hits, start, length, sample_rate),
         ))
     return loops
 
@@ -229,5 +232,5 @@ def export_region(
         bpm=bpm,
         bars=bars,
         start_time=start / sample_rate,
-        cues=_cues_for(hits, start, length, sample_rate),
+        cues=cues_for(hits, start, length, sample_rate),
     )
