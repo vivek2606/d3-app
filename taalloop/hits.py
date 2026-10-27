@@ -74,6 +74,31 @@ def classify(low_ratio: float, centroid: float, flatness: float, decay: float) -
     return "Chanti"
 
 
+def refine_onset(mono: np.ndarray, sr: int, onset: int, limit: int) -> int:
+    """Move a spectral onset onto the stroke's actual attack in the waveform.
+
+    Spectrogram-based separators (Demucs, HPSS) smear a little energy one STFT
+    window ahead of each attack, and onset backtracking follows that smear, so
+    raw onsets come out 30-50 ms early.  The attack is where the amplitude
+    rises 20% of the way from the level at the onset to the stroke's peak
+    (the faint smear stays below that), stepped back to the zero crossing
+    before it so the full transient is kept.
+    """
+    end = min(limit, onset + int(0.08 * sr))
+    window = np.abs(mono[onset:end])
+    if len(window) < 16:
+        return onset
+    base = float(window[: max(1, int(0.002 * sr))].max())
+    peak = float(window.max())
+    if peak <= base * 1.5:
+        return onset  # no clear rise (e.g. on top of a loud tail): keep the spectral onset
+    attack = int(np.argmax(window >= base + 0.2 * (peak - base)))
+    lookback = mono[max(onset, onset + attack - int(0.002 * sr)) : onset + attack + 1]
+    crossings = np.nonzero(np.diff(np.signbit(lookback)))[0]
+    back = len(lookback) - 1 - (crossings[-1] + 1) if len(crossings) else 0
+    return onset + attack - back
+
+
 def detect_hits(mono: np.ndarray, sr: int, suppress_pre_echo: bool = False) -> list[Hit]:
     # Leading silence lets the onset envelope see a hit that starts at sample 0.
     pad = int(0.1 * sr)
@@ -84,12 +109,17 @@ def detect_hits(mono: np.ndarray, sr: int, suppress_pre_echo: bool = False) -> l
         wait=max(1, int(0.04 * sr / HOP)), delta=0.1,
     )
     onsets = np.clip(onsets - pad, 0, len(mono) - 1)
+    onsets = [refine_onset(mono, sr, int(o), int(onsets[i + 1]) if i + 1 < len(onsets) else len(mono))
+              for i, o in enumerate(onsets)]
     hits = []
     global_peak = float(np.max(np.abs(mono))) or 1.0
     for i, onset in enumerate(onsets):
         nxt = onsets[i + 1] if i + 1 < len(onsets) else len(mono)
         segment = mono[onset : min(nxt, onset + int(sr * MAX_HIT_SECONDS))]
-        peak = float(np.max(np.abs(segment))) if len(segment) else 0.0
+        # The peak stops short of the next onset so a hit is never credited
+        # with the next stroke's attack.
+        own = segment[: max(1, len(segment) - int(0.005 * sr))]
+        peak = float(np.max(np.abs(own))) if len(segment) else 0.0
         if peak < global_peak * 0.03:  # ignore bleed / reverb tails (< -30 dB)
             continue
         feats = hit_features(segment, sr)
