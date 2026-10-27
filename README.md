@@ -33,10 +33,12 @@ Open <http://localhost:8000>. Uploads and job files are stored in `./data`
 With Docker:
 
 ```bash
-docker build -t taalloop .                              # HPSS only
-docker build -t taalloop --build-arg WITH_DEMUCS=1 .    # with Demucs
-docker run -p 8000:8000 -v taalloop-data:/data taalloop
+docker build -t taalloop .                              # with Demucs (CPU PyTorch, model built in)
+docker build -t taalloop --build-arg WITH_DEMUCS=0 .    # small HPSS-only image
+docker run -p 8000:7860 -v taalloop-data:/home/app/data taalloop
 ```
+
+Then open <http://localhost:8000>.
 
 ### Which separation to use
 
@@ -48,6 +50,47 @@ docker run -p 8000:8000 -v taalloop-data:/data taalloop
 
 Demucs is used automatically when it's installed. HPSS is a fallback, so expect
 noisier loops with it.
+
+## Free online hosting (Hugging Face Spaces)
+
+The free **CPU basic** Space (2 vCPU, 16 GB RAM) runs the full app,
+Demucs included. The repo deploys there on its own: every push to `main`
+runs `.github/workflows/deploy-hf-space.yml`, which pushes the app to your
+Space, and the Space rebuilds the Docker image.
+
+One-time setup:
+
+1. **Create a Hugging Face account** at <https://huggingface.co/join>.
+2. **Create the Space**: <https://huggingface.co/new-space>
+   - Space name: `taalloop`
+   - SDK: **Docker**, template **Blank**
+   - Hardware: **CPU basic · free**
+   - Visibility: **Private** is recommended. Only you (signed in) can use it,
+     so nobody else spends its CPU or uploads songs to it.
+3. **Create an access token**: <https://huggingface.co/settings/tokens>, then
+   **Create new token**, type **Write**. Copy it.
+4. **Give GitHub the token**: in this GitHub repo go to **Settings → Secrets
+   and variables → Actions**.
+   - **Secrets** tab → **New repository secret**: name `HF_TOKEN`, value =
+     the token.
+   - **Variables** tab → **New repository variable**: name `HF_SPACE`,
+     value = `<your-hf-username>/taalloop`.
+5. **Deploy**: **Actions** tab → **Deploy to Hugging Face Space** → **Run
+   workflow**. Later pushes to `main` deploy automatically.
+6. Open the Space at `https://huggingface.co/spaces/<your-hf-username>/taalloop`.
+   The first build takes about 10–15 minutes.
+
+Good to know:
+
+- **Speed**: Demucs on the free 2-CPU machine takes several minutes per song.
+  The page shows progress while it works. Choose **HPSS (fast)** for a quick
+  look.
+- **Sleeping**: a free Space goes to sleep after about 48 hours without
+  visitors and wakes when you open it, which takes a minute or two.
+- **Storage is temporary**: uploads and results are wiped when the Space
+  restarts or sleeps, so download your loops when you make them.
+- Open it from any device, including an iPad, and send the downloaded loops
+  to Logic through the Files app.
 
 ## Using the editor
 
