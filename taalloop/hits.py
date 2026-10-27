@@ -43,12 +43,26 @@ class Hit:
         return {k: round(float(v), 5) if not isinstance(v, str) else v for k, v in self.__dict__.items()}
 
 
-def hit_features(segment: np.ndarray, sr: int) -> tuple[float, float, float, float]:
-    """(low-band energy ratio, spectral centroid Hz, spectral flatness, decay seconds)."""
+def _power_spectrum(window: np.ndarray) -> np.ndarray:
+    return np.abs(np.fft.rfft(window * np.hanning(len(window)), n=4096)) ** 2
+
+
+def hit_features(segment: np.ndarray, sr: int, before: np.ndarray | None = None) -> tuple[float, float, float, float]:
+    """(low-band energy ratio, spectral centroid Hz, spectral flatness, decay seconds).
+
+    ``before`` is the audio just ahead of the onset.  Its spectrum is
+    subtracted so the features describe only what the stroke adds, not a
+    bayan still ringing underneath it or a held harmonium chord.
+    """
     window = segment[: int(sr * FEATURE_MS / 1000)]
     if len(window) < 32 or not np.any(window):
         return 0.0, 0.0, 1.0, 0.0
-    spectrum = np.abs(np.fft.rfft(window * np.hanning(len(window)), n=4096)) ** 2
+    spectrum = _power_spectrum(window)
+    if before is not None and len(before) >= len(window) // 2:
+        prior = _power_spectrum(before[-len(window):]) * (len(window) / min(len(before), len(window)))
+        added = np.maximum(spectrum - prior, 0.0)
+        if added.sum() > 0.05 * spectrum.sum():  # otherwise nothing clearly new: keep the raw spectrum
+            spectrum = added + 1e-4 * added.max()
     freqs = np.fft.rfftfreq(4096, 1 / sr)
     total = spectrum.sum() + 1e-12
     low_ratio = float(spectrum[freqs < 250].sum() / total)
@@ -122,7 +136,8 @@ def detect_hits(mono: np.ndarray, sr: int, suppress_pre_echo: bool = False) -> l
         peak = float(np.max(np.abs(own))) if len(segment) else 0.0
         if peak < global_peak * 0.03:  # ignore bleed / reverb tails (< -30 dB)
             continue
-        feats = hit_features(segment, sr)
+        before = mono[max(0, onset - int(sr * FEATURE_MS / 1000)) : onset]
+        feats = hit_features(segment, sr, before)
         hits.append(Hit(onset / sr, classify(*feats), peak, (nxt - onset) / sr, *feats))
     return _drop_pre_echoes(hits) if suppress_pre_echo else hits
 
