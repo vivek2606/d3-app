@@ -28,6 +28,15 @@ def test_wav_is_plain_16bit_pcm_with_cues_and_loop():
     assert np.max(np.abs(decoded - audio)) < 3 / 32767  # dither is within ~1 LSB
 
 
+def test_acid_chunk_carries_tempo_beats_and_meter():
+    from taalloop.wavio import ACID_ONE_SHOT, ACID_STRETCH, Acid
+    data = encode_wav(np.zeros((100, 2)), SR, loop=True, acid=Acid(beats=14, tempo=96.0, numerator=7))
+    info = read_wav_info(data)
+    assert info.chunks[-1] == "acid"
+    assert info.acid == Acid(beats=14, tempo=96.0, numerator=7, denominator=4)
+    assert info.acid_flags & ACID_STRETCH and not info.acid_flags & ACID_ONE_SHOT
+
+
 def test_wav_without_metadata_has_only_fmt_and_data():
     info = read_wav_info(encode_wav(np.zeros(10), 44100))
     assert info.chunks == ["fmt ", "data"] and info.channels == 1

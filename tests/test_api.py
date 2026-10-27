@@ -62,6 +62,7 @@ def test_full_pipeline(client, ready_job):
     info = read_wav_info(zf.read(names[0]))
     assert (info.format_tag, info.bits_per_sample, info.sample_rate) == (1, 16, 48000)
     assert info.frames == 4 * 48000 and info.loop == (0, info.frames - 1)
+    assert (info.acid.beats, info.acid.tempo, info.acid.numerator, info.acid.denominator) == (8, 120, 4, 4)
     assert info.cues  # slice markers on the transients
 
     res = client.post(f"/api/jobs/{job_id}/export/region",
@@ -69,7 +70,8 @@ def test_full_pipeline(client, ready_job):
                             "sample_rate": 44100, "loop_number": 7})
     assert res.status_code == 200, res.text
     assert 'filename="Test-Song_Loop07_120BPM_1Bar.wav"' in res.headers["content-disposition"]
-    assert read_wav_info(res.content).frames == 2 * 44100
+    info = read_wav_info(res.content)
+    assert info.frames == 2 * 44100 and info.acid.beats == 4
 
     grid = {"time_signature": "4/4", "bpm": 120, "sam_time": 0.0}
     found = client.post(f"/api/jobs/{job_id}/phrases", json=grid).json()
@@ -85,6 +87,7 @@ def test_full_pipeline(client, ready_job):
     info = read_wav_info(zf.read(roll))
     beats = int(roll.split("_")[-1].removesuffix("Beat.wav"))
     assert info.frames == beats * 24000 and info.loop is None  # whole beats at 48 kHz, one-shot
+    assert info.acid.beats == beats and info.acid.tempo == 120  # still follows the project tempo
 
     res = client.post(f"/api/jobs/{job_id}/export/loops",
                       json={**grid, "bars": 1, "skip_fills": True})

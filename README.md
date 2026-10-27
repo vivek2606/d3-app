@@ -2,7 +2,8 @@
 
 Upload a song (audio or video), extract its drums/percussion, and export
 **bar-exact 16-bit loops, todas (fills) and rolls** ready for the **Korg
-Nautilus** sampler and **FL Studio**. The app understands Indian taals:
+Nautilus** sampler, **FL Studio**, **Bitwig Studio** and **Logic** (Mac and
+iPad). The app understands Indian taals:
 Keherwa (4/4), Dadra (6 beats) and Rupak (7 beats).
 
 ```
@@ -88,6 +89,11 @@ Every file is:
 - **Click-free**: the start is snapped within ±5 ms of the beat to where both
   the first sample and the wrap-around point are near zero crossings, then
   2 ms / 4 ms raised-cosine micro-fades are applied.
+- **Tempo-tagged**: an ACID (`acid`) chunk stores the BPM, the number of
+  beats and the meter, so DAWs that read ACIDized WAVs (Bitwig, Logic, FL
+  Studio, Ableton, Cubase, …) sync the file to the project tempo on import,
+  without guessing or filename parsing. libsndfile reads the chunk back as
+  written.
 - Optionally **cue-marked**: a labelled cue point (`01 Bayan`, `02 Chanti`, …)
   on every stroke, in the standard RIFF `cue `/`LIST adtl` chunks that
   slicers such as FL Studio's Slicex read as slice points.
@@ -105,6 +111,20 @@ Every file is:
 
 These are transparent heuristics, not a trained model, so audition the chips
 before exporting.
+
+### Time signatures in a DAW
+
+The BPM in every file counts **matras** (the beats you clap). DAWs count tempo
+in quarter notes, so the files are tagged with one matra per DAW beat:
+
+| Taal | Matras per bar | DAW time signature at the file's BPM |
+|---|---|---|
+| Keherwa | 4 (8 = 2 bars) | 4/4 |
+| Dadra | 6 | 6/4 (or 3/4, two bars per cycle) |
+| Rupak | 7 | 7/4 |
+
+To write Dadra as 6/8 or Rupak as 7/8 instead, set the project to that
+signature at **half** the file's BPM: the loop then fills exactly one bar.
 
 ## Loading the WAVs into your gear
 
@@ -136,6 +156,34 @@ before exporting.
    bar count (*2 bars*). The clip locks to any project tempo.
 3. Todas and rolls work the same way. For a roll, set the Time knob to its
    beat count, then drop it at the end of a loop to lead back into the Sam.
+
+### Bitwig Studio
+
+1. Drag a loop from the browser (or your file manager) into a Clip Launcher
+   slot or onto an audio track in the Arranger. Bitwig reads the embedded ACID
+   tempo, so the clip plays in sync at the project tempo straight away.
+2. For Dadra or Rupak, set the transport time signature to 6/4 or 7/4 (see
+   the table above) so bar lines match the cycle.
+3. Put the todas and rolls in the slots under your loops, and launch them on
+   the next bar, e.g. a toda in the bar before the Sam.
+4. To play individual strokes, use **Slice to Drum Machine** on a clip (by
+   beat or by onset) and play them from pads or keys.
+5. If a clip ever doesn't follow the project tempo, check its stretch setting
+   in the Inspector and set its tempo to the BPM in the filename.
+
+### Logic (Mac and iPad)
+
+1. Get the files onto the iPad (AirDrop, iCloud Drive or the Files app). In
+   Logic, open the **Browser → Files** and drag a loop into a track or into a
+   **Live Loops** cell.
+2. Logic should treat the tagged WAVs like Apple Loops and follow the project
+   tempo. If a region doesn't, turn on **Follow Tempo** (Flex) for it in the
+   region inspector, or set its tempo to the BPM in the filename.
+3. Live Loops suits this well: one row per section with a theka loop, and a
+   toda or roll cell to trigger before the Sam. Cells quantize to the bar.
+4. For playing todas, rolls or slices from the keyboard, load the WAV into
+   **Quick Sampler** (Slice mode) or **Drum Machine Designer**.
+5. Set the project time signature from the table above for Dadra and Rupak.
 
 ## API
 

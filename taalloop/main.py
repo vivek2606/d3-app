@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from . import phrases, separation, slicer
 from .jobs import JobNotFound, JobStore
 from .rhythm import TIME_SIGNATURES, get_time_signature, shift_grid
-from .wavio import encode_wav
+from .wavio import Acid, encode_wav
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -80,6 +80,17 @@ def _grid(meta: dict, req: GridParams):
 def _phrases(meta: dict, req: GridParams) -> list[phrases.Phrase]:
     ts, beats, downbeat, bpm = _grid(meta, req)
     return phrases.detect_phrases(meta["hits"], beats, downbeat, bpm, ts, meta["duration"])
+
+
+def _acid(beats: int, bpm: float, ts) -> Acid:
+    # One matra = one DAW (quarter-note) beat at the file's BPM, so a Dadra bar
+    # is 6/4 and a Rupak bar 7/4 in DAW terms.
+    return Acid(beats=beats, tempo=bpm, numerator=ts.beats_per_bar, denominator=4)
+
+
+def _loop_wav(loop: slicer.Loop, ts) -> bytes:
+    return encode_wav(loop.audio, loop.sample_rate, cues=loop.cues, loop=True,
+                      acid=_acid(loop.bars * ts.beats_per_bar, loop.bpm, ts))
 
 
 def _wav_response(data: bytes, filename: str) -> Response:
@@ -155,7 +166,7 @@ def export_loops(job_id: str, req: LoopsRequest) -> Response:
     )
     if not loops:
         raise HTTPException(422, "no loops found; check the tempo and Sam, or allow loops with fills")
-    files = {lp.filename: encode_wav(lp.audio, lp.sample_rate, cues=lp.cues, loop=True) for lp in loops}
+    files = {lp.filename: _loop_wav(lp, ts) for lp in loops}
     name = f"{slicer.safe_song_name(meta['song'])}_{loops[0].bars}Bar_Loops.zip"
     return _zip_response(files, name)
 
@@ -172,7 +183,7 @@ def export_region(job_id: str, req: RegionRequest) -> Response:
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
-    data = encode_wav(loop.audio, loop.sample_rate, cues=loop.cues, loop=True)
+    data = _loop_wav(loop, ts)
     response = _wav_response(data, loop.filename)
     response.headers["X-Loop-BPM"] = slicer.format_bpm(loop.bpm)
     return response
@@ -194,7 +205,8 @@ def export_fills(job_id: str, req: FillsRequest) -> Response:
         length = int(round(phrase.beats * 60.0 / phrase.bpm * sr))
         segment, start = slicer.cut_loop(audio, sr, phrase.start, length)
         cues = slicer.cues_for(hits, start, length, sr)
-        files[f"{phrase.kind}/{phrase.filename(meta['song'], ts)}"] = encode_wav(segment, sr, cues=cues)
+        files[f"{phrase.kind}/{phrase.filename(meta['song'], ts)}"] = encode_wav(
+            segment, sr, cues=cues, acid=_acid(phrase.beats, phrase.bpm, ts))
     return _zip_response(files, f"{slicer.safe_song_name(meta['song'])}_Toda_Rolls.zip")
 
 

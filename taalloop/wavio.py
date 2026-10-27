@@ -10,6 +10,9 @@ control every byte of the header:
 * samples are quantised to 16-bit with TPDF dither instead of plain truncation.
 * optional ``cue `` + ``LIST adtl labl`` chunks carry labelled slice markers.
 * optional ``smpl`` chunk carries a forward loop over the whole file.
+* optional ``acid`` chunk carries tempo, beat count and meter, which Bitwig,
+  Logic, FL Studio, Ableton and others read to sync the file to the project
+  tempo without guessing.
 """
 
 from __future__ import annotations
@@ -29,6 +32,26 @@ BITS_PER_SAMPLE = 16
 class Cue:
     sample: int
     label: str
+
+
+ACID_ONE_SHOT = 0x01
+ACID_ROOT_NOTE = 0x02
+ACID_STRETCH = 0x04
+
+
+@dataclass(frozen=True)
+class Acid:
+    """ACIDized-WAV tempo metadata.
+
+    ``beats`` are counted at ``tempo`` (beats per minute), so the DAW knows the
+    file lasts ``beats * 60 / tempo`` seconds and stretches it to the project
+    tempo.  DAWs count tempo in quarter notes, so ``denominator`` is 4 when one
+    counted beat (matra) is one DAW beat.
+    """
+    beats: int
+    tempo: float
+    numerator: int
+    denominator: int = 4
 
 
 def float_to_pcm16(audio: np.ndarray, dither: bool = True, seed: int = 0) -> np.ndarray:
@@ -57,6 +80,16 @@ def _cue_chunks(cues: list[Cue]) -> bytes:
     return _chunk(b"cue ", cue_payload) + _chunk(b"LIST", b"adtl" + labels)
 
 
+def _acid_chunk(acid: Acid) -> bytes:
+    # flags, root note, unknown (0x8000), unknown float, beats, meter denominator,
+    # meter numerator, tempo.  Drums: stretch on, no root note, not a one-shot
+    # (ACID one-shots ignore the project tempo, but todas/rolls must follow it).
+    return _chunk(b"acid", struct.pack(
+        "<IHHfIHHf", ACID_STRETCH, 60, 0x8000, 0.0,
+        acid.beats, acid.denominator, acid.numerator, float(acid.tempo),
+    ))
+
+
 def _smpl_chunk(sample_rate: int, loop_start: int, loop_end: int, unity_note: int) -> bytes:
     header = struct.pack(
         "<IIIIIIIII",
@@ -82,6 +115,7 @@ def encode_wav(
     loop: bool = False,
     dither: bool = True,
     unity_note: int = 60,
+    acid: Acid | None = None,
 ) -> bytes:
     """Encode float audio (frames,) or (frames, channels) as a 16-bit PCM WAV."""
     audio = np.asarray(audio)
@@ -109,6 +143,8 @@ def encode_wav(
         body += _cue_chunks(cue_list)
     if loop and frames > 1:
         body += _smpl_chunk(sample_rate, 0, frames - 1, unity_note)
+    if acid is not None:
+        body += _acid_chunk(acid)
     return b"RIFF" + struct.pack("<I", len(body)) + body
 
 
@@ -130,6 +166,8 @@ class WavInfo:
     cues: list[Cue]
     loop: tuple[int, int] | None
     chunks: list[str]
+    acid: Acid | None = None
+    acid_flags: int = 0
 
 
 def read_wav_info(data: bytes) -> WavInfo:
@@ -142,6 +180,8 @@ def read_wav_info(data: bytes) -> WavInfo:
     positions: dict[int, int] = {}
     labels: dict[int, str] = {}
     loop = None
+    acid = None
+    acid_flags = 0
     while pos + 8 <= len(data):
         fourcc = data[pos : pos + 4]
         size = struct.unpack("<I", data[pos + 4 : pos + 8])[0]
@@ -165,6 +205,9 @@ def read_wav_info(data: bytes) -> WavInfo:
                     cue_id = struct.unpack("<I", payload[sub + 8 : sub + 12])[0]
                     labels[cue_id] = payload[sub + 12 : sub + 8 + sub_size].rstrip(b"\x00").decode()
                 sub += 8 + sub_size + (sub_size % 2)
+        elif fourcc == b"acid":
+            acid_flags, _, _, _, beats, denominator, numerator, tempo = struct.unpack("<IHHfIHHf", payload[:24])
+            acid = Acid(beats, tempo, numerator, denominator)
         elif fourcc == b"smpl":
             start, end = struct.unpack("<II", payload[36 + 8 : 36 + 16])
             loop = (start, end)
@@ -172,4 +215,4 @@ def read_wav_info(data: bytes) -> WavInfo:
     if fmt is None:
         raise ValueError("missing fmt chunk")
     cues = [Cue(positions[i], labels.get(i, "")) for i in sorted(positions)]
-    return WavInfo(fmt[0], fmt[1], fmt[2], fmt[5], frames, cues, loop, chunks)
+    return WavInfo(fmt[0], fmt[1], fmt[2], fmt[5], frames, cues, loop, chunks, acid, acid_flags)

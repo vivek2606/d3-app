@@ -1,4 +1,7 @@
-# Optional: high-quality drum separation (installs PyTorch, ~2 GB).
-# For a CUDA GPU, install the matching torch build first: https://pytorch.org/get-started/locally/
+# Optional: high-quality drum separation with Demucs (installs PyTorch).
+# The default PyTorch from PyPI works on CPU and uses an NVIDIA GPU if present.
+# For a smaller CPU-only install, first run:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# The first separation downloads the htdemucs model (~80 MB).
 -r requirements.txt
 demucs==4.1.0
