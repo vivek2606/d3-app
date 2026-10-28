@@ -84,12 +84,20 @@ fi
 # is run, which breaks Demucs's one-time model download; use certifi's bundle.
 CERTS=$(.venv/bin/python -c 'import certifi; print(certifi.where())' 2>/dev/null) && export SSL_CERT_FILE="$CERTS"
 
-LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+# The address other devices on the Wi-Fi use: ask macOS which interface carries
+# the default route (Wi-Fi isn't always en0), then fall back to the usual ones.
+IFACE=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}')
+LAN_IP=$({ [ -n "$IFACE" ] && ipconfig getifaddr "$IFACE"; } 2>/dev/null ||
+         ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
 echo
 echo "TaalLoop is starting..."
 echo "  On this Mac:                http://localhost:$PORT"
 if [ -n "$LAN_IP" ]; then
   echo "  On your iPad (same Wi-Fi):  http://$LAN_IP:$PORT"
+  echo "  (If the iPad can't connect, allow Python in System Settings > Network > Firewall.)"
+else
+  echo "  On your iPad: http://<this Mac's IP address>:$PORT"
+  echo "  (Find the IP address in System Settings > Wi-Fi > Details.)"
 fi
 echo
 echo "Keep this window open while you use TaalLoop. Close it to stop TaalLoop."

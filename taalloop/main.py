@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import io
+import socket
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -107,9 +108,27 @@ def _zip_response(files: dict[str, bytes], filename: str) -> Response:
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
+def lan_address() -> str | None:
+    """This machine's address on the local network, for opening the app from a phone or iPad.
+
+    Connecting a UDP socket sends nothing; it only makes the OS pick the
+    interface it would route through, whichever one that is.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 9))  # TEST-NET-1: never actually contacted
+            address = sock.getsockname()[0]
+    except OSError:
+        return None
+    return None if address.startswith("127.") or address == "0.0.0.0" else address
+
+
 @app.get("/api/config")
-def config() -> dict:
+def config(request: Request) -> dict:
+    address = lan_address()
+    port = request.url.port or 80
     return {
+        "lan_url": f"http://{address}:{port}" if address else None,
         "time_signatures": [
             {"id": ts.id, "label": ts.label, "beats_per_bar": ts.beats_per_bar}
             for ts in TIME_SIGNATURES.values()

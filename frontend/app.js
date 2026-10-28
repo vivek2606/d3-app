@@ -287,6 +287,11 @@ async function pollJob(id) {
 // ---------------------------------------------------------------- wiring
 async function init() {
   state.config = await (await fetch('/api/config')).json()
+  const lanUrl = state.config.lan_url
+  if (lanUrl && ['localhost', '127.0.0.1'].includes(location.hostname)) {
+    Object.assign($('lan-url'), { href: lanUrl, textContent: lanUrl })
+    $('lan').hidden = false
+  }
   const methods = state.config.separation_methods
   $('separation').innerHTML =
     `<option value="auto">Auto (${methods.includes('demucs') ? 'Demucs' : 'HPSS'})</option>` +
