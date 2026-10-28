@@ -38,12 +38,50 @@ Your browser opens <http://localhost:8000> by itself. Keep the launcher
 window open while you work, and close it to stop TaalLoop. Your first Demucs
 song also downloads the separation model (~80 MB) once.
 
-**From your iPad**: the launcher window shows an address like
-`http://192.168.1.20:8000`. Open it in Safari on the iPad while it's on the
-same Wi-Fi; downloaded loops land in the Files app, ready for Logic. On
-Windows, allow TaalLoop through the firewall on private networks when asked.
+### Using it from your iPad
+
+The top of the TaalLoop page on your computer (and the launcher window) shows
+an address like `http://192.168.1.20:8000`. Open it in Safari on the iPad
+while both are on the same Wi-Fi. Downloaded loops land in the Files app,
+ready for Logic.
+
+If the iPad can't connect:
+
+- **Mac**: open **System Settings → Network → Firewall → Options…**, turn
+  off "Block all incoming connections" and set **Python** to **Allow
+  incoming connections**. Then restart TaalLoop.
+- **Windows**: allow TaalLoop through the firewall on private networks when
+  asked.
+- Check that both devices are on the same network: a router's "Guest"
+  Wi-Fi is usually kept separate.
+- No address shown? Find the computer's IP address in **System Settings →
+  Wi-Fi → Details** (Mac) or with `ipconfig` (Windows), and open
+  `http://<that address>:8000`.
+
 Anyone else on the same Wi-Fi could open that address too, so use it on
 your home network.
+
+### Away from home
+
+TaalLoop runs on your computer, so the computer has to be on, awake and
+running TaalLoop. To stop a Mac sleeping, use **System Settings → Battery →
+Options → Prevent automatic sleeping when the display is off** (on a laptop
+this applies while it's plugged in). Then:
+
+- **Anywhere, with Tailscale (free)**: install [Tailscale](https://tailscale.com)
+  on the computer and the Tailscale app on the iPad, and sign in with the
+  same account on both. Tailscale links your own devices into a private
+  network over any internet connection. In the Tailscale app on the computer,
+  note its address (it starts with `100.`), then open
+  `http://100.x.y.z:8000` on the iPad from anywhere, on Wi-Fi or mobile
+  data. Only your own devices can reach it.
+- **At rehearsals and gigs, with your phone's hotspot**: turn on **Personal
+  Hotspot** on your iPhone and connect the computer and the iPad to it. That
+  counts as the same Wi-Fi, so no setup and no internet are needed. The
+  address changes on a new network, so use the one shown at the top of the
+  TaalLoop page.
+- **Without your computer, with online hosting**: see
+  [Online hosting](#online-hosting-hugging-face-spaces) below (paid).
 
 ### Manual start (any OS)
 
